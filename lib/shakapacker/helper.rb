@@ -95,7 +95,7 @@ module Shakapacker::Helper
   #
   #   <%= javascript_pack_tag 'calendar' %>
   #   <%= javascript_pack_tag 'map' %>
-  def javascript_pack_tag(*names, defer: true, async: false, **options)
+  def javascript_pack_tag(*names, defer: true, async: false, skip_integrity: false, **options)
     if @javascript_pack_tag_loaded
       raise "To prevent duplicated chunks on the page, you should call javascript_pack_tag only once on the page. " \
       "Please refer to https://github.com/shakacode/shakapacker/blob/main/README.md#view-helpers-javascript_pack_tag-and-stylesheet_pack_tag for the usage guide"
@@ -115,6 +115,12 @@ module Shakapacker::Helper
       concat "\n" if sync.any? && deferred.any?
       concat javascript_include_tag(*sync, **options)
     end
+
+    # capture do
+    #   render_javascript_tags(deferred, options, true)
+    #   concat "\n" if non_deferred.any? && deferred.any?
+    #   render_javascript_tags(non_deferred, options, false)
+    # end
   end
 
   # Creates a link tag, for preloading, that references a given Shakapacker asset.
@@ -237,5 +243,43 @@ module Shakapacker::Helper
       path_to_asset(current_shakapacker_instance.manifest.lookup!(path), options)
     rescue
       path_to_asset(current_shakapacker_instance.manifest.lookup!(name), options)
+    end
+
+    def include_subresource_integrity?(skip_integrity: false)
+      # Skip if it is globally disabled
+      return false unless current_shakapacker_instance.config.integrity?
+
+      # Skip for non HTTPS requests (http://www.w3.org/TR/SRI/#non-secure-contexts-remain-non-secure)
+      return false unless respond_to?(:request) && request && request.ssl?
+
+      # Skip if it's explicitly set for a resource
+      return false if current_shakapacker_instance.config.integrity? && skip_integrity
+
+      true
+    end
+
+    def lookup_source(source)
+      (source.respond_to?(:dig) && source.dig("src")) || source
+    end
+
+    def lookup_integrity(source)
+      (source.respond_to?(:dig) && source.dig("integrity")) || nil
+    end
+
+    def render_javascript_tags(sources, options, defer)
+      last_index = sources.size - 1
+      sources.each.with_index do |source, index|
+        tag_source = lookup_source(source)
+        tag_options = options.merge(defer: defer)
+        if include_subresource_integrity?
+          integrity = lookup_integrity(source)
+          if integrity.present?
+            tag_options[:integrity] = integrity
+            tag_options[:crossorigin] = "anonymous"
+          end
+        end
+        concat javascript_include_tag(tag_source, **tag_options)
+        concat "\n" unless index == last_index
+      end
     end
 end
