@@ -55,6 +55,11 @@ default: &default
   # SHAKAPACKER_ASSET_HOST will override both configurations.
   # asset_host: custom-path
 
+  # Utilizing webpack-subresource-integrity plugin, will generate integrity hashes for all entries in manifest.json
+  # https://github.com/waysact/webpack-subresource-integrity/tree/main/webpack-subresource-integrity
+  # By default its disabled.
+  integrity: false
+
 development:
   <<: *default
   compile: true
